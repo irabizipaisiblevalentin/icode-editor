@@ -249,3 +249,125 @@ body {
   color: var(--text-secondary);
   margin-top: 2px;
 }
+
+/* ── License screen ─────────────────────────────────────────────── */
+
+.hidden {
+  display: none !important;
+}
+
+body.locked #messages,
+body.locked #input-area {
+  display: none;
+}
+
+#license-screen {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.license-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px 32px;
+  max-width: 380px;
+  width: 100%;
+  text-align: center;
+}
+
+.license-card h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+#license-message {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+
+.license-sub {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.license-card button {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.license-card button:hover {
+  border-color: var(--accent);
+}
+
+.license-card button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: white;
+  font-weight: 600;
+}
+
+.license-card button.primary:hover {
+  background: var(--accent-hover);
+}
+
+.license-card button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#passcode-wrap {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+#passcode-input {
+  flex: 1;
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-input);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 10px 12px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  outline: none;
+}
+
+#passcode-input:focus {
+  border-color: var(--accent);
+}
+
+#passcode-wrap button {
+  width: auto;
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
+.license-status {
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-height: 16px;
+  margin-top: 8px;
+  line-height: 1.5;
+}

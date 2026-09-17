@@ -74,12 +74,14 @@ function getNonce() {
 class ChatViewProvider {
   static viewType = 'icode-ai.chat';
 
-  constructor(extensionUri, context) {
+  constructor(extensionUri, context, gate) {
     this.extensionUri = extensionUri;
     this.context = context;
+    this.gate = gate;
     this.view = undefined;
     this.sessionId = undefined;
     this.abortController = undefined;
+    this.licensed = false;
   }
 
   resolveWebviewView(webviewView, _context, _token) {
@@ -94,14 +96,56 @@ class ChatViewProvider {
         this.post({ type: 'clear' });
       }
       if (msg.type === 'abort') this.handleAbort();
+      if (msg.type === 'checkLicense') this.refreshLicense();
+      if (msg.type === 'signinGoogle') this.handleGoogleSignIn();
+      if (msg.type === 'enterPasscode') this.handlePasscode(msg.code);
     });
+
+    this.refreshLicense();
   }
 
   post(msg) {
     if (this.view) this.view.webview.postMessage(msg);
   }
 
+  async refreshLicense() {
+    const state = await this.gate.getState();
+    this.licensed = !!state.licensed;
+    this.post({ type: 'license', licensed: this.licensed, state });
+  }
+
+  async handleGoogleSignIn() {
+    this.post({ type: 'licenseStatus', message: 'Opening your browser for Google sign-in…' });
+    const result = await this.gate.beginGoogleSignIn((step) => {
+      this.post({ type: 'licenseStatus', message: step });
+    });
+    this.post({ type: 'licenseStatus', message: result.message });
+    if (result.licensed) {
+      this.licensed = true;
+      const state = await this.gate.getState();
+      this.post({ type: 'license', licensed: true, state });
+    } else {
+      this.refreshLicense();
+    }
+  }
+
+  async handlePasscode(code) {
+    this.post({ type: 'licenseStatus', message: 'Checking your Passcode…' });
+    const result = await this.gate.enterPasscode(code);
+    this.post({ type: 'licenseStatus', message: result.message });
+    if (result.ok) {
+      this.licensed = true;
+      const state = await this.gate.getState();
+      this.post({ type: 'license', licensed: true, state });
+    }
+  }
+
   async getServer() {
+    if (!this.licensed) {
+      vscode.window.showInformationMessage('iCode AI: Please sign in or enter a Passcode to use the AI.');
+      this.refreshLicense();
+      return undefined;
+    }
     try {
       return await startServer(this.context);
     } catch (e) {
@@ -129,6 +173,11 @@ class ChatViewProvider {
   }
 
   async handleSend(text) {
+    if (!this.licensed) {
+      this.post({ type: 'error', text: 'License required. Sign in with Google or enter a Passcode to use iCode AI.' });
+      this.refreshLicense();
+      return;
+    }
     const srv = await this.getServer();
     if (!srv) return;
 
@@ -245,6 +294,20 @@ class ChatViewProvider {
       </button>
     </div>
     <div id="messages"></div>
+    <div id="license-screen" class="hidden">
+      <div class="license-card">
+        <h2>iCode AI</h2>
+        <p id="license-message">You need a license to use iCode AI.</p>
+        <p class="license-sub">Sign in with Google for a free 21-day trial, or enter a payment Passcode.</p>
+        <div id="passcode-wrap" class="hidden">
+          <input id="passcode-input" type="text" placeholder="Your Payment Passcode" autocapitalize="characters" autocomplete="off" spellcheck="false">
+          <button id="passcode-submit">Activate</button>
+        </div>
+        <button id="google-btn" class="primary">Sign in with Google</button>
+        <button id="passcode-btn">I have a Passcode</button>
+        <p class="license-status" id="license-status"></p>
+      </div>
+    </div>
     <div id="input-area">
       <textarea id="input" placeholder="Ask iCode AI to edit code, refactor, explain..." rows="1"></textarea>
       <button id="send" title="Send (Enter)">
@@ -259,10 +322,15 @@ class ChatViewProvider {
 }
 
 function activate(context) {
-  const provider = new ChatViewProvider(context.extensionUri, context);
-
   const gate = new LicenseGate(context);
-  context.subscriptions.push(vscode.commands.registerCommand('icode-ai.payment', () => gate.run()));
+  const provider = new ChatViewProvider(context.extensionUri, context, gate);
+
+  context.subscriptions.push(vscode.commands.registerCommand('icode-ai.payment', async () => {
+    const state = await gate.getState();
+    if (!state.licensed) {
+      await vscode.commands.executeCommand(ChatViewProvider.viewType + '.focus');
+    }
+  }));
   setImmediate(() => {
     gate.run();
   });

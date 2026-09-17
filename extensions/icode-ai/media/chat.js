@@ -5,11 +5,55 @@
   const input = document.getElementById('input');
   const sendBtn = document.getElementById('send');
   const newChatBtn = document.getElementById('new-chat');
+  const licenseScreen = document.getElementById('license-screen');
+  const licenseMessage = document.getElementById('license-message');
+  const licenseStatus = document.getElementById('license-status');
+  const passcodeWrap = document.getElementById('passcode-wrap');
+  const passcodeInput = document.getElementById('passcode-input');
+  const passcodeBtn = document.getElementById('passcode-btn');
+  const passcodeSubmit = document.getElementById('passcode-submit');
+  const googleBtn = document.getElementById('google-btn');
 
   let currentAssistantEl = null;
   let currentAssistantText = '';
 
   const vscode = acquireVsCodeApi();
+
+  // --- License screen ---
+
+  function showLicense(statusText) {
+    licenseScreen.classList.remove('hidden');
+    if (statusText) licenseStatus.textContent = statusText;
+  }
+
+  function hideLicense() {
+    licenseScreen.classList.add('hidden');
+    licenseStatus.textContent = '';
+    document.body.classList.remove('locked');
+  }
+
+  googleBtn.addEventListener('click', () => {
+    licenseStatus.textContent = 'Opening your browser for Google sign-in…';
+    vscode.postMessage({ type: 'signinGoogle' });
+  });
+
+  passcodeBtn.addEventListener('click', () => {
+    passcodeWrap.classList.toggle('hidden');
+    if (!passcodeWrap.classList.contains('hidden')) passcodeInput.focus();
+  });
+
+  passcodeSubmit.addEventListener('click', () => {
+    const code = passcodeInput.value.trim();
+    if (!code) return;
+    passcodeInput.value = '';
+    passcodeWrap.classList.add('hidden');
+    licenseStatus.textContent = 'Checking your Passcode…';
+    vscode.postMessage({ type: 'enterPasscode', code });
+  });
+
+  passcodeInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') passcodeSubmit.click();
+  });
 
   // --- Send ---
 
@@ -150,6 +194,22 @@
     const msg = event.data;
 
     switch (msg.type) {
+      case 'license':
+        if (msg.licensed) {
+          hideLicense();
+        } else {
+          document.body.classList.add('locked');
+          licenseMessage.textContent = (msg.state && msg.state.message) || 'You need a license to use iCode AI.';
+          licenseStatus.textContent = '';
+          showLicense();
+        }
+        break;
+
+      case 'licenseStatus':
+        if (!document.body.classList.contains('locked')) break;
+        licenseStatus.textContent = msg.message || '';
+        break;
+
       case 'userMessage':
         // Already rendered locally
         break;
@@ -182,6 +242,9 @@
         break;
     }
   });
+
+  // Request license state from the extension host on load.
+  vscode.postMessage({ type: 'checkLicense' });
 
   // Focus input on load
   input.focus();
