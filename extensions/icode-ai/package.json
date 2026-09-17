@@ -1,0 +1,61 @@
+{
+  "name": "icode-ai",
+  "displayName": "iCode AI",
+  "description": "AI coding agent built into iCode — chat, plan, and edit files with AI.",
+  "version": "0.0.1",
+  "publisher": "icode",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "icode-ai",
+          "title": "iCode AI",
+          "icon": "media/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "icode-ai": [
+        {
+          "type": "webview",
+          "id": "icode-ai.chat",
+          "name": "AI Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "icode-ai.newChat",
+        "title": "New Chat",
+        "icon": "$(add)"
+      },
+      {
+        "command": "icode-ai.focus",
+        "title": "Open iCode AI"
+      },
+      {
+        "command": "icode-ai.payment",
+        "title": "iCode Payment Passcode and Trial"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "icode-ai.focus",
+        "key": "ctrl+shift+a",
+        "mac": "cmd+shift+a"
+      }
+    ]
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/vscode": "^1.100.0"
+  }
+}

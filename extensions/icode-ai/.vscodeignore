@@ -1,0 +1,5 @@
+node_modules/**
+src/extension.ts
+tsconfig.json
+script/**
+**/*.map
