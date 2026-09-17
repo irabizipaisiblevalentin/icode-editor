@@ -51,18 +51,28 @@ jobs:
 
       - name: Build iCode (min, x64)
         run: npm run gulp vscode-linux-x64-min
+        env:
+          GITHUB_TOKEN: x-access-token:${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare .deb
         run: npm run gulp vscode-linux-x64-prepare-deb
+        env:
+          GITHUB_TOKEN: x-access-token:${{ secrets.GITHUB_TOKEN }}
 
       - name: Build .deb
         run: npm run gulp vscode-linux-x64-build-deb
+        env:
+          GITHUB_TOKEN: x-access-token:${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare .rpm
         run: npm run gulp vscode-linux-x64-prepare-rpm
+        env:
+          GITHUB_TOKEN: x-access-token:${{ secrets.GITHUB_TOKEN }}
 
       - name: Build .rpm
         run: npm run gulp vscode-linux-x64-build-rpm
+        env:
+          GITHUB_TOKEN: x-access-token:${{ secrets.GITHUB_TOKEN }}
 
       - name: Archive unpacked build
         run: tar -czf icode-linux-x64.tar.gz -C .. VSCode-linux-x64
@@ -119,12 +129,18 @@ jobs:
 
       - name: Build iCode (min, arm64)
         run: npm run gulp vscode-linux-arm64-min
+        env:
+          GITHUB_TOKEN: x-access-token:${{ secrets.GITHUB_TOKEN }}
 
       - name: Prepare .deb
         run: npm run gulp vscode-linux-arm64-prepare-deb
+        env:
+          GITHUB_TOKEN: x-access-token:${{ secrets.GITHUB_TOKEN }}
 
       - name: Build .deb
         run: npm run gulp vscode-linux-arm64-build-deb
+        env:
+          GITHUB_TOKEN: x-access-token:${{ secrets.GITHUB_TOKEN }}
 
       - name: Archive unpacked build
         run: tar -czf icode-linux-arm64.tar.gz -C .. VSCode-linux-arm64
@@ -140,48 +156,6 @@ jobs:
         with:
           name: icode-linux-arm64
           path: dist/
-
-  darwin-x64:
-    name: macOS x64 (.dmg)
-    runs-on: macos-13
-    env:
-      VSCODE_QUALITY: oss
-      VSCODE_ARCH: x64
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          lfs: false
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: .nvmrc
-
-      - name: Install npm dependencies
-        run: |
-          set -e
-          for i in {1..5}; do
-            npm ci && break
-            echo "Retrying npm ci ($i)..."
-          done
-        env:
-          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: 1
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Bundle iCode agent
-        run: node extensions/icode-ai/script/fetch-binary.cjs --target darwin-x64
-        env:
-          ICODE_CLI_VERSION: ${{ vars.ICODE_CLI_VERSION }}
-
-      - name: Build iCode (min, x64)
-        run: npm run gulp vscode-darwin-x64-min
-
-      - name: Create DMG
-        run: mkdir -p out && node build/darwin/create-dmg.ts .. out
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: icode-darwin-x64
-          path: out/*.dmg
 
   darwin-arm64:
     name: macOS arm64 (.dmg)
@@ -216,6 +190,8 @@ jobs:
 
       - name: Build iCode (min, arm64)
         run: npm run gulp vscode-darwin-arm64-min
+        env:
+          GITHUB_TOKEN: x-access-token:${{ secrets.GITHUB_TOKEN }}
 
       - name: Create DMG
         run: mkdir -p out && node build/darwin/create-dmg.ts .. out
@@ -258,8 +234,22 @@ jobs:
         env:
           ICODE_CLI_VERSION: ${{ vars.ICODE_CLI_VERSION }}
 
+      - name: Add Windows SDK signtool to PATH
+        shell: powershell
+        run: |
+          $kitRoot = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+          $signtool = Get-ChildItem -Path $kitRoot -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) {
+            Write-Error "signtool.exe not found under $kitRoot"
+          }
+          Add-Content -Path $env:GITHUB_PATH -Value (Split-Path $signtool.FullName)
+          Write-Host "signtool ready: $(Split-Path $signtool.FullName)"
+
       - name: Build iCode (min, x64)
         run: npm run gulp vscode-win32-x64-min
+        env:
+          GITHUB_TOKEN: x-access-token:${{ secrets.GITHUB_TOKEN }}
 
       - name: Build system installer
         run: npm run gulp vscode-win32-x64-system-setup
@@ -284,7 +274,7 @@ jobs:
   release:
     name: Publish installers
     if: ${{ always() && startsWith(github.ref, 'refs/tags/v') }}
-    needs: [linux-x64, linux-arm64, darwin-x64, darwin-arm64, win32-x64]
+    needs: [linux-x64, linux-arm64, darwin-arm64, win32-x64]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
