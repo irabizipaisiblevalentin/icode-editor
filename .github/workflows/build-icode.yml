@@ -251,6 +251,9 @@ jobs:
         env:
           GITHUB_TOKEN: x-access-token:${{ secrets.GITHUB_TOKEN }}
 
+      - name: Copy Inno updater to build tools
+        run: npm run gulp vscode-win32-x64-inno-updater
+
       - name: Build system installer
         run: npm run gulp vscode-win32-x64-system-setup
 
