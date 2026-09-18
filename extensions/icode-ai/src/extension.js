@@ -97,7 +97,7 @@ class ChatViewProvider {
       }
       if (msg.type === 'abort') this.handleAbort();
       if (msg.type === 'checkLicense') this.refreshLicense();
-      if (msg.type === 'signinGoogle') this.handleGoogleSignIn();
+      if (msg.type === 'startTrial') this.handleStartTrial();
       if (msg.type === 'enterPasscode') this.handlePasscode(msg.code);
     });
 
@@ -114,19 +114,13 @@ class ChatViewProvider {
     this.post({ type: 'license', licensed: this.licensed, state });
   }
 
-  async handleGoogleSignIn() {
-    this.post({ type: 'licenseStatus', message: 'Opening your browser for Google sign-in…' });
-    const result = await this.gate.beginGoogleSignIn((step) => {
-      this.post({ type: 'licenseStatus', message: step });
-    });
-    this.post({ type: 'licenseStatus', message: result.message });
-    if (result.licensed) {
-      this.licensed = true;
-      const state = await this.gate.getState();
-      this.post({ type: 'license', licensed: true, state });
-    } else {
-      this.refreshLicense();
-    }
+  async handleStartTrial() {
+    this.post({ type: 'licenseStatus', message: 'Starting your free 21-day trial…' });
+    const result = await this.gate.startTrial();
+    this.post({ type: 'licenseStatus', message: (result && result.message) || 'Starting trial…' });
+    const state = await this.gate.getState();
+    this.licensed = !!state.licensed;
+    this.post({ type: 'license', licensed: this.licensed, state });
   }
 
   async handlePasscode(code) {
@@ -142,7 +136,7 @@ class ChatViewProvider {
 
   async getServer() {
     if (!this.licensed) {
-      vscode.window.showInformationMessage('iCode AI: Please sign in or enter a Passcode to use the AI.');
+      vscode.window.showInformationMessage('iCode AI: Please start your free trial or enter a Passcode to use the AI.');
       this.refreshLicense();
       return undefined;
     }
@@ -174,7 +168,7 @@ class ChatViewProvider {
 
   async handleSend(text) {
     if (!this.licensed) {
-      this.post({ type: 'error', text: 'License required. Sign in with Google or enter a Passcode to use iCode AI.' });
+      this.post({ type: 'error', text: 'License required. Start your free trial or enter a Passcode to use iCode AI.' });
       this.refreshLicense();
       return;
     }
@@ -298,12 +292,12 @@ class ChatViewProvider {
       <div class="license-card">
         <h2>iCode AI</h2>
         <p id="license-message">You need a license to use iCode AI.</p>
-        <p class="license-sub">Sign in with Google for a free 21-day trial, or enter a payment Passcode.</p>
+        <p class="license-sub">Start a free 21-day trial on this device, or enter a payment Passcode.</p>
         <div id="passcode-wrap" class="hidden">
           <input id="passcode-input" type="text" placeholder="Your Payment Passcode" autocapitalize="characters" autocomplete="off" spellcheck="false">
           <button id="passcode-submit">Activate</button>
         </div>
-        <button id="google-btn" class="primary">Sign in with Google</button>
+        <button id="trial-btn" class="primary">Start free 21-day trial</button>
         <button id="passcode-btn">I have a Passcode</button>
         <p class="license-status" id="license-status"></p>
       </div>

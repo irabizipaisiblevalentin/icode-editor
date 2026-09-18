@@ -12,7 +12,7 @@
   const passcodeInput = document.getElementById('passcode-input');
   const passcodeBtn = document.getElementById('passcode-btn');
   const passcodeSubmit = document.getElementById('passcode-submit');
-  const googleBtn = document.getElementById('google-btn');
+  const trialBtn = document.getElementById('trial-btn');
 
   let currentAssistantEl = null;
   let currentAssistantText = '';
@@ -32,9 +32,9 @@
     document.body.classList.remove('locked');
   }
 
-  googleBtn.addEventListener('click', () => {
-    licenseStatus.textContent = 'Opening your browser for Google sign-in…';
-    vscode.postMessage({ type: 'signinGoogle' });
+  trialBtn.addEventListener('click', () => {
+    licenseStatus.textContent = 'Starting your free 21-day trial…';
+    vscode.postMessage({ type: 'startTrial' });
   });
 
   passcodeBtn.addEventListener('click', () => {

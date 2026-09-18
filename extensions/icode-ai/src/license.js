@@ -7,8 +7,6 @@ const path = require('path');
 
 const CONTROL_URL = process.env.ICODE_CONTROL_URL || 'https://icode-s05p.onrender.com';
 const TRIAL_DAYS = 21;
-const GOOGLE_STATE_POLL_MS = 2500;
-const GOOGLE_STATE_MAX_WAIT_MS = 5 * 60 * 1000;
 
 function getHardwareId() {
   let parts = [];
@@ -42,12 +40,10 @@ function getHardwareId() {
 // Editor share the same hardware fingerprint, so a machine already licensed via
 // the CLI (trial or paid Passcode) unlocks the Editor automatically.
 class LicenseGate {
-  constructor(context) {
+constructor(context) {
     this.context = context;
-    this.storagePath = path.join(context.globalStorageUri.fsPath, 'license.json');
     this.heartbeatTimer = undefined;
     this.lastBeat = Date.now();
-    this.polling = false;
   }
 
   get stateDir() {
@@ -94,19 +90,6 @@ class LicenseGate {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) return null;
-      return await res.json();
-    } catch (e) {
-      return null;
-    }
-  }
-
-  async serverGet(endpoint, params) {
-    try {
-      const qs = params ? '?' + new URLSearchParams(params).toString() : '';
-      const res = await fetch(CONTROL_URL + endpoint + qs, {
         signal: AbortSignal.timeout(5000),
       });
       if (!res.ok) return null;
@@ -168,17 +151,6 @@ class LicenseGate {
       return { licensed: false, reason: 'blocked', message: status.message || 'Your access to iCode has been revoked.', blocks };
     }
 
-    if (status.google_trial_active) {
-      return {
-        licensed: true,
-        reason: 'google',
-        message: 'Google trial active.',
-        expires_at: status.google_expires_at,
-        type: 'google',
-        blocks,
-      };
-    }
-
     if (status.passcode_valid && status.ok) {
       return {
         licensed: true,
@@ -200,7 +172,6 @@ class LicenseGate {
       message: status.message || 'You need a license to use iCode AI.',
       expires_at: status.expires_at,
       days_left: expiring,
-      google_enabled: true,
       blocks,
     };
   }
@@ -213,50 +184,6 @@ class LicenseGate {
       return true;
     }
     return false;
-  }
-
-  // ─── Google sign-in ─────────────────────────────────────────────────
-
-  async beginGoogleSignIn(onStep) {
-    if (this.polling) return { ok: false, message: 'A Google sign-in is already in progress.' };
-
-    try {
-      const status = await this.checkStatus();
-      if (status && status.google_trial_active) {
-        return { ok: true, message: 'Your Google trial is already active.', licensed: true };
-      }
-    } catch (e) { /* keep going to kick off sign-in */ }
-
-    if (onStep) onStep('Signing in with Google…');
-    const begin = await this.serverGet('/v1/google/begin', this.devicePayload());
-    if (!begin || !begin.ok || !begin.url) {
-      return { ok: false, message: (begin && begin.message) || 'Google sign-in is not available right now.' };
-    }
-
-    try {
-      await vscode.env.openExternal(vscode.Uri.parse(begin.url));
-    } catch (e) {
-      return { ok: false, message: 'Could not open your browser for Google sign-in.' };
-    }
-    if (onStep) onStep('Waiting for you to sign in with Google in your browser…');
-
-    this.polling = true;
-    const deadline = Date.now() + GOOGLE_STATE_MAX_WAIT_MS;
-    try {
-      while (Date.now() < deadline) {
-        const state = await this.getState();
-        if (state.licensed) {
-          return { ok: true, message: 'Licensed. Welcome back to iCode!', licensed: true };
-        }
-        if (state.reason === 'blocked') {
-          return { ok: false, message: state.message, licensed: false };
-        }
-        await sleep(GOOGLE_STATE_POLL_MS);
-      }
-      return { ok: false, message: 'Timed out waiting for Google sign-in. Please try again.', licensed: false };
-    } finally {
-      this.polling = false;
-    }
   }
 
   // ─── Passcode ───────────────────────────────────────────────────────
@@ -307,10 +234,6 @@ class LicenseGate {
     }, 30000);
     this.context.subscriptions.push({ dispose: () => clearInterval(this.heartbeatTimer) });
   }
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 module.exports = { LicenseGate, TRIAL_DAYS };
