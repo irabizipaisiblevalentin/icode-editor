@@ -19,7 +19,7 @@ jobs:
       VSCODE_QUALITY: oss
       VSCODE_ARCH: x64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
 
@@ -97,7 +97,7 @@ jobs:
       VSCODE_QUALITY: oss
       VSCODE_ARCH: arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
 
@@ -164,7 +164,7 @@ jobs:
       VSCODE_QUALITY: oss
       VSCODE_ARCH: arm64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
 
@@ -208,7 +208,7 @@ jobs:
       VSCODE_QUALITY: oss
       VSCODE_ARCH: x64
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           lfs: false
 
@@ -280,7 +280,7 @@ jobs:
     needs: [linux-x64, linux-arm64, darwin-arm64, win32-x64]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           fetch-tags: true
