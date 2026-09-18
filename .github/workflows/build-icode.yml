@@ -292,8 +292,12 @@ jobs:
 
       - name: Create release
         if: ${{ !cancelled() }}
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*
-          fail_on_unmatched_files: false
-          generate_release_notes: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ github.ref_name }}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --generate-notes --draft
+          fi
+          gh release upload "$tag" dist/* --clobber
+          gh release edit "$tag" --draft=false
