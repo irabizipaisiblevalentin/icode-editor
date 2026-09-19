@@ -82,6 +82,8 @@ class ChatViewProvider {
     this.sessionId = undefined;
     this.abortController = undefined;
     this.licensed = false;
+    this.userMessageIDs = new Set();
+    this.seenDeltas = new Set();
   }
 
   resolveWebviewView(webviewView, _context, _token) {
@@ -93,6 +95,8 @@ class ChatViewProvider {
       if (msg.type === 'send') this.handleSend(msg.text);
       if (msg.type === 'newChat') {
         this.sessionId = undefined;
+        this.userMessageIDs = new Set();
+        this.seenDeltas = new Set();
         this.post({ type: 'clear' });
       }
       if (msg.type === 'abort') this.handleAbort();
@@ -177,6 +181,8 @@ class ChatViewProvider {
 
     try {
       const sessionId = await this.ensureSession(srv.url, srv.password);
+      this.userMessageIDs = new Set();
+      this.seenDeltas = new Set();
       this.post({ type: 'userMessage', text });
       this.listenEvents(srv.url, srv.password);
 
@@ -239,20 +245,37 @@ class ChatViewProvider {
     const type = event.type || '';
     const props = event.properties || event;
 
-    if (type === 'message.created' || type === 'message.updated' || type === 'part.created' || type === 'part.updated') {
-      if (props.role === 'user') return;
-      const text = props.content || props.text || props.parts;
-      if (text) {
-        const chunk = Array.isArray(text) ? JSON.stringify(text) : String(text);
-        this.post({ type: 'assistantChunk', text: chunk, done: false });
-      }
+    if (type === 'message.created' || type === 'message.updated') {
+      const info = props.info || props;
+      if (info.role === 'user' && info.id) this.userMessageIDs.add(info.id);
+      return;
     }
 
-    if (type === 'session.status' || type === 'session.updated' || type === 'session.idle') {
-      const status = props.status || props.messageStatus;
-      if (status === 'idle' || status === 'completed' || props.status === 'idle') {
-        this.post({ type: 'assistantChunk', text: '', done: true });
-      }
+    if (type === 'message.part.delta') {
+      if (props.field !== 'text' || !props.delta) return;
+      if (this.userMessageIDs.has(props.messageID)) return;
+      this.seenDeltas.add(props.partID);
+      this.post({ type: 'assistantChunk', text: String(props.delta), done: false });
+      return;
+    }
+
+    if (type === 'message.part.updated') {
+      const part = props.part || props;
+      if (!part || part.type !== 'text' || !part.text) return;
+      if (this.userMessageIDs.has(part.messageID)) return;
+      if (this.seenDeltas.has(part.id)) return;
+      this.post({ type: 'assistantChunk', text: String(part.text), done: false });
+      return;
+    }
+
+    if (type === 'session.idle') {
+      this.post({ type: 'assistantChunk', text: '', done: true });
+      return;
+    }
+
+    if (type === 'session.status') {
+      const st = props.status && props.status.type ? props.status.type : props.status;
+      if (st === 'idle') this.post({ type: 'assistantChunk', text: '', done: true });
     }
 
     if (type && type.includes('permission')) {

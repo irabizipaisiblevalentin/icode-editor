@@ -2,7 +2,7 @@
   "name": "icode-ai",
   "displayName": "iCode AI",
   "description": "AI coding agent built into iCode — chat, plan, and edit files with AI.",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "publisher": "icode",
   "engines": {
     "vscode": "^1.100.0"

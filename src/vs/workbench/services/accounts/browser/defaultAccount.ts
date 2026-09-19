@@ -90,7 +90,23 @@ interface IMcpRegistryResponse {
 	readonly mcp_registries: ReadonlyArray<IMcpRegistryProvider>;
 }
 
-function toDefaultAccountConfig(defaultChatAgent: IDefaultChatAgent): IDefaultAccountConfig {
+function toDefaultAccountConfig(defaultChatAgent: IDefaultChatAgent | undefined): IDefaultAccountConfig {
+	if (!defaultChatAgent) {
+		return {
+			preferredExtensions: [],
+			authenticationProvider: {
+				default: { id: 'microsoft', name: 'Microsoft Account' },
+				enterprise: { id: 'microsoft', name: 'Microsoft Account' },
+				enterpriseProviderConfig: '',
+				enterpriseProviderUriSetting: '',
+				scopes: [],
+			},
+			entitlementUrl: '',
+			tokenEntitlementUrl: '',
+			mcpRegistryDataUrl: '',
+			managedSettingsUrl: '',
+		};
+	}
 	return {
 		preferredExtensions: [
 			defaultChatAgent.chatExtensionId,
