@@ -709,50 +709,262 @@ import { getPartsSplashColors } from './partsSplash.js';
 
 	//#endregion
 
-	const { result, configuration } = await load<IDesktopMain, INativeWindowConfiguration>(
-		{
-			configureDeveloperSettings: function (windowConfig) {
-				return {
-					// disable automated devtools opening on error when running extension tests
-					// as this can lead to nondeterministic test execution (devtools steals focus)
-					forceDisableShowDevtoolsOnError: typeof windowConfig.extensionTestsPath === 'string' || windowConfig['enable-smoke-test-driver'] === true,
-					// enable devtools keybindings in extension development window
-					forceEnableDeveloperKeybindings: Array.isArray(windowConfig.extensionDevelopmentPath) && windowConfig.extensionDevelopmentPath.length > 0,
-					removeDeveloperKeybindingsAfterLoad: true
-				};
-			},
-			beforeImport: function (windowConfig) {
+	//#region Boot Error Fallback
+	//
+	// If the workbench fails to load or render for any reason, the window used
+	// to stay on the (dark) parts splash forever. Render a professional iCode
+	// error screen instead so a failed service or module never results in a
+	// completely blank window.
 
-				// Show our splash as early as possible
-				showSplash(windowConfig);
+	interface IBootErrorEntry {
+		at: number;
+		message: string;
+		stack?: string;
+	}
 
-				// Code windows have a `vscodeWindowId` property to identify them
-				Object.defineProperty(window, 'vscodeWindowId', {
-					get: () => windowConfig.windowId
-				});
+	let bootErrorEntries: IBootErrorEntry[] = [];
+	let bootErrorShown = false;
+	let bootErrorTimer: number | undefined;
+	let bootErrorPoll: number | undefined;
+	let bootErrorListenersAttached = false;
 
-				// It looks like browsers only lazily enable
-				// the <canvas> element when needed. Since we
-				// leverage canvas elements in our code in many
-				// locations, we try to help the browser to
-				// initialize canvas when it is idle, right
-				// before we wait for the scripts to be loaded.
-				window.requestIdleCallback(() => {
-					const canvas = document.createElement('canvas');
-					const context = canvas.getContext('2d');
-					context?.clearRect(0, 0, canvas.width, canvas.height);
-					canvas.remove();
-				}, { timeout: 50 });
+	function recordBootError(error: unknown): void {
+		bootErrorEntries.push({
+			at: Date.now(),
+			message: error instanceof Error ? error.message : String(error),
+			stack: error instanceof Error && error.stack ? error.stack : undefined
+		});
+		console.error(`[iCode boot] ${error instanceof Error ? error.stack ?? error.message : error}`);
+	}
 
-				// Track import() perf
-				performance.mark('code/willLoadWorkbenchMain');
+	function markBooted(): void {
+		if (bootErrorListenersAttached) {
+			window.removeEventListener('error', onWindowError, true);
+			window.removeEventListener('unhandledrejection', onWindowUnhandledRejection, true);
+			bootErrorListenersAttached = false;
+		}
+		if (bootErrorTimer !== undefined) {
+			window.clearTimeout(bootErrorTimer);
+			bootErrorTimer = undefined;
+		}
+		if (bootErrorPoll !== undefined) {
+			window.clearInterval(bootErrorPoll);
+			bootErrorPoll = undefined;
+		}
+	}
+
+	function showBootErrorScreen(): void {
+		if (bootErrorShown) {
+			return;
+		}
+		bootErrorShown = true;
+		markBooted();
+
+		// Assemble the fallback UI using DOM APIs only so it is always valid
+		// under the document's strict Content-Security-Policy (no innerHTML,
+		// no trusted-types policy required).
+		const root = document.createElement('div');
+		root.setAttribute('role', 'alert');
+		root.setAttribute('style', [
+			'position:fixed',
+			'inset:0',
+			'z-index:2147483646',
+			'display:flex',
+			'align-items:center',
+			'justify-content:center',
+			'background:#1b1b1b',
+			'color:#e8e8e8',
+			'font:13px -apple-system,BlinkMacSystemFont,"Segoe UI",Ubuntu,Cantarell,sans-serif',
+			'user-select:none'
+		].join(';'));
+
+		const card = document.createElement('div');
+		card.setAttribute('style', [
+			'display:flex',
+			'flex-direction:column',
+			'gap:16px',
+			'max-width:540px',
+			'width:calc(100% - 48px)',
+			'padding:32px 36px',
+			'border:1px solid #333333',
+			'border-radius:10px',
+			'background:#252526',
+			'box-shadow:0 12px 40px rgba(0,0,0,0.45)'
+		].join(';'));
+
+		const brand = document.createElement('div');
+		brand.textContent = 'iCode';
+		brand.setAttribute('style', 'font-size:20px;font-weight:600;letter-spacing:0.2px;color:#4daafc;');
+
+		const headline = document.createElement('div');
+		headline.textContent = 'Something went wrong while starting the application.';
+		headline.setAttribute('style', 'font-size:14px;font-weight:500;line-height:1.4;');
+
+		const body = document.createElement('div');
+		body.textContent = 'iCode could not finish starting up. Any unsaved work is safe, and no data has been touched. You can retry now, or open the technical details and check for an error entry before contacting support.';
+		body.setAttribute('style', 'line-height:1.5;color:#bdbdbd;');
+
+		const diagnostics = document.createElement('details');
+		diagnostics.setAttribute('style', 'border-top:1px solid #3c3c3c;padding-top:14px;');
+		const detailsSummary = document.createElement('summary');
+		detailsSummary.textContent = 'Technical details';
+		detailsSummary.setAttribute('style', 'cursor:pointer;color:#9c9c9c;font-size:12px;outline:none;');
+		diagnostics.appendChild(detailsSummary);
+
+		const detailsLog = document.createElement('pre');
+		detailsLog.textContent = bootErrorEntries
+			.map(entry => `${new Date(entry.at).toISOString()}${entry.stack ? '\n' + entry.stack : '\n' + entry.message}`)
+			.join('\n\n');
+		detailsLog.setAttribute('style', [
+			'margin-top:10px',
+			'padding:12px 14px',
+			'background:#1e1e1e',
+			'border:1px solid #3c3c3c',
+			'border-radius:6px',
+			'color:#d4b06a',
+			'font:11px/1.5 "SFMono-Regular",Menlo,Consolas,"Liberation Mono",monospace',
+			'white-space:pre-wrap',
+			'word-break:break-word',
+			'max-height:220px',
+			'overflow:auto'
+		].join(';'));
+		diagnostics.appendChild(detailsLog);
+
+		const actions = document.createElement('div');
+		actions.setAttribute('style', 'display:flex;gap:10px;align-items:center;');
+
+		const retryButton = document.createElement('button');
+		retryButton.type = 'button';
+		retryButton.textContent = 'Retry';
+		retryButton.setAttribute('style', 'padding:6px 18px;border:1px solid #0e639c;border-radius:4px;background:#0e639c;color:#ffffff;font-size:13px;cursor:pointer;');
+		retryButton.addEventListener('click', () => location.reload());
+
+		const diagnosticsButton = document.createElement('button');
+		diagnosticsButton.type = 'button';
+		diagnosticsButton.textContent = 'Open Diagnostics';
+		diagnosticsButton.setAttribute('style', 'padding:6px 18px;border:1px solid #3c3c3c;border-radius:4px;background:#2d2d2d;color:#e8e8e8;font-size:13px;cursor:pointer;');
+		diagnosticsButton.addEventListener('click', () => {
+			diagnostics.open = !diagnostics.open;
+			diagnosticsButton.textContent = diagnostics.open ? 'Close Diagnostics' : 'Open Diagnostics';
+		});
+
+		actions.append(retryButton, diagnosticsButton);
+
+		card.append(brand, headline, body, actions, diagnostics);
+		root.appendChild(card);
+		document.body.appendChild(root);
+	}
+
+	function onWindowError(event: Event): void {
+		const errorEvent = event as ErrorEvent;
+		if (errorEvent instanceof ErrorEvent && errorEvent.error instanceof Error) {
+			event.preventDefault();
+			recordBootError(errorEvent.error);
+			showBootErrorScreen();
+		}
+	}
+
+	function onWindowUnhandledRejection(event: PromiseRejectionEvent): void {
+		event.preventDefault();
+		recordBootError(event.reason);
+		showBootErrorScreen();
+	}
+
+	function armBootWatchdog(): void {
+		window.addEventListener('error', onWindowError, true);
+		window.addEventListener('unhandledrejection', onWindowUnhandledRejection, true);
+		bootErrorListenersAttached = true;
+
+		// The workbench adds `.monaco-workbench` to its root container while
+		// rendering. Until that class shows up the window is still on the
+		// splash screen, so keep the watchdog active.
+		bootErrorPoll = window.setInterval(() => {
+			if (document.querySelector('.monaco-workbench')) {
+				markBooted();
+			}
+		}, 500);
+
+		// Never allow the empty splash to stay on screen indefinitely. A
+		// healthy cold start usually completes well within a minute.
+		bootErrorTimer = window.setTimeout(() => {
+			if (!document.querySelector('.monaco-workbench')) {
+				recordBootError(new Error('iCode did not finish starting within the expected time and was stopped.'));
+				showBootErrorScreen();
+			}
+		}, 60000);
+	}
+
+	//#endregion
+
+	try {
+		const { result, configuration } = await load<IDesktopMain, INativeWindowConfiguration>(
+			{
+				configureDeveloperSettings: function (windowConfig) {
+					return {
+						// disable automated devtools opening on error when running extension tests
+						// as this can lead to nondeterministic test execution (devtools steals focus)
+						forceDisableShowDevtoolsOnError: typeof windowConfig.extensionTestsPath === 'string' || windowConfig['enable-smoke-test-driver'] === true,
+						// enable devtools keybindings in extension development window
+						forceEnableDeveloperKeybindings: Array.isArray(windowConfig.extensionDevelopmentPath) && windowConfig.extensionDevelopmentPath.length > 0,
+						removeDeveloperKeybindingsAfterLoad: true
+					};
+				},
+				beforeImport: function (windowConfig) {
+
+					// Show our splash as early as possible
+					showSplash(windowConfig);
+
+					// Code windows have a `vscodeWindowId` property to identify them
+					Object.defineProperty(window, 'vscodeWindowId', {
+						get: () => windowConfig.windowId
+					});
+
+					// It looks like browsers only lazily enable
+					// the <canvas> element when needed. Since we
+					// leverage canvas elements in our code in many
+					// locations, we try to help the browser to
+					// initialize canvas when it is idle, right
+					// before we wait for the scripts to be loaded.
+					window.requestIdleCallback(() => {
+						const canvas = document.createElement('canvas');
+						const context = canvas.getContext('2d');
+						context?.clearRect(0, 0, canvas.width, canvas.height);
+						canvas.remove();
+					}, { timeout: 50 });
+
+					// Track import() perf
+					performance.mark('code/willLoadWorkbenchMain');
+				}
+			}
+		);
+
+		// Mark start of workbench
+		performance.mark('code/didLoadWorkbenchMain');
+
+		// Monitor for a successful boot. If the workbench fails to load or
+		// render, a branded error screen is shown instead of a blank window.
+		armBootWatchdog();
+
+		// Load workbench
+		try {
+			await result.main(configuration);
+
+			// Workbench main resolved and the window rendered -> booted.
+			if (document.querySelector('.monaco-workbench')) {
+				markBooted();
+			}
+		} catch (error) {
+			// Only surface the error screen if the UI never came up. If the
+			// workbench already rendered, its own error handling takes over.
+			if (!document.querySelector('.monaco-workbench')) {
+				recordBootError(error);
+				showBootErrorScreen();
+			} else {
+				console.error(`[iCode boot] ${error instanceof Error ? error.stack ?? error.message : error}`);
 			}
 		}
-	);
-
-	// Mark start of workbench
-	performance.mark('code/didLoadWorkbenchMain');
-
-	// Load workbench
-	result.main(configuration);
+	} catch (error) {
+		recordBootError(error);
+		showBootErrorScreen();
+	}
 }());
