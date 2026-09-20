@@ -48,7 +48,13 @@ import { GitHubPaths, IDefaultAccountService } from '../../../../../platform/def
 import product from '../../../../../platform/product/common/product.js';
 import { isCompletionsEnabled } from '../../../../../editor/common/services/completionsEnablement.js';
 
-const defaultChat = product.defaultChatAgent;
+const defaultChat = product.defaultChatAgent ?? ({
+	completionsEnablementSetting: 'chat.completions.experimental',
+	nextEditSuggestionsSetting: 'editor.inlineSuggest.edits.enabled',
+	provider: { default: { id: '', name: '' } },
+	termsStatementUrl: '',
+	privacyStatementUrl: ''
+} as unknown as typeof product.defaultChatAgent);
 const completionsConfigurationTargets = [
 	ConfigurationTarget.WORKSPACE_FOLDER,
 	ConfigurationTarget.WORKSPACE,
